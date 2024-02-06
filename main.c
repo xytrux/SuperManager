@@ -8,36 +8,11 @@
 #define HOME_DIR u->pw_dir
 #define SYSTEM_INFO struct SystemInfo
 
-SYSTEM_INFO
+void appendToEditControl(HWND hOut, const char *text)
 {
-    MEMORYSTATUSEX memInfo;
-    DWORD uptime, processes;
-};
-
-HWND hOut;
-
-void printUserInfo()
-{
-    TCHAR username[UNLEN + 1];
-    DWORD size = UNLEN + 1;
-    if (GetUserName((TCHAR *)username, &size))
-    {
-        char output[512];
-        sprintf(output, "User Info:\n   - Username: %s\n\n", username);
-        SendMessage(hOut, EM_SETSEL, (WPARAM)-1, (LPARAM)-1); // Set selection to end of text
-        SendMessage(hOut, EM_REPLACESEL, 0, (LPARAM)output);  // Insert new text at selection
-    }
-}
-
-void printSystemInfo(SYSTEM_INFO *s)
-{
-    char output[512];
-    sprintf(output, "System Info:\n   - Uptime: %ld seconds\n   - Total RAM: %.2f MB (%.2f GB)\n   - Free RAM: %.2f MB (%.2f GB)\n   - Processes: %d\n\n",
-            s->uptime,
-            (float)s->memInfo.ullTotalPhys / (1024 * 1024), (float)s->memInfo.ullTotalPhys / (1024 * 1024 * 1024),
-            (float)s->memInfo.ullAvailPhys / (1024 * 1024), (float)s->memInfo.ullAvailPhys / (1024 * 1024 * 1024),
-            s->processes);
-    SetWindowText(hOut, output);
+    int TextLen = GetWindowTextLength(hOut);
+    SendMessage(hOut, EM_SETSEL, (WPARAM)TextLen, (LPARAM)TextLen); // set the selection at the end of text
+    SendMessage(hOut, EM_REPLACESEL, 0, (LPARAM)text);              // replace the selection
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
@@ -56,15 +31,52 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+SYSTEM_INFO
+{
+    MEMORYSTATUSEX memInfo;
+    DWORD uptime, processes;
+};
+
+HWND hOut;
+
+void printUserInfo()
+{
+
+    // Clear the output window
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
+    TCHAR username[UNLEN + 1];
+    DWORD size = UNLEN + 1;
+    if (GetUserName((TCHAR *)username, &size))
+    {
+        char output[512];
+        sprintf(output, "User Info:\n   - Username: %s\n\n", username);
+        appendToEditControl(hOut, output);
+    }
+}
+
+void printSystemInfo(SYSTEM_INFO *s)
+{
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
+    char output[512];
+    sprintf(output, "System Info:\n   - Uptime: %ld seconds\n   - Total RAM: %.2f MB (%.2f GB)\n   - Free RAM: %.2f MB (%.2f GB)\n   - Processes: %d\n\n",
+            s->uptime,
+            (float)s->memInfo.ullTotalPhys / (1024 * 1024), (float)s->memInfo.ullTotalPhys / (1024 * 1024 * 1024),
+            (float)s->memInfo.ullAvailPhys / (1024 * 1024), (float)s->memInfo.ullAvailPhys / (1024 * 1024 * 1024),
+            s->processes);
+    appendToEditControl(hOut, output);
+}
+
 void listOpenWindows()
 {
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     char output[4096] = "Open Windows:\n";
     EnumWindows(EnumWindowsProc, (LPARAM)output);
-    SetWindowText(hOut, output);
+    appendToEditControl(hOut, output);
 }
 
 void listFilesAndFolders()
 {
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     char output[512] = "File Manager:\n";
 
     WIN32_FIND_DATA findFileData;
@@ -81,22 +93,19 @@ void listFilesAndFolders()
         FindClose(hFind);
     }
 
-    SetWindowText(hOut, output);
-}
-
-void launchProgram(const char *program)
-{
-    ShellExecute(NULL, "open", program, NULL, NULL, SW_SHOWDEFAULT);
+    appendToEditControl(hOut, output);
 }
 
 void printHelp()
 {
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     char output[512] = "Help:\n   - Instructions on how to use each feature.\n   - Detailed explanations for each tab.\n";
-    SetWindowText(hOut, output);
+    appendToEditControl(hOut, output);
 }
 
 void listProcesses()
 {
+    SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     HANDLE hProcessSnap;
     PROCESSENTRY32 pe32;
     char output[4096] = "Running Processes:\n";
@@ -129,7 +138,12 @@ void listProcesses()
 
     CloseHandle(hProcessSnap);
 
-    SetWindowText(hOut, output);
+    appendToEditControl(hOut, output);
+}
+
+void launchProgram(const char *program)
+{
+    ShellExecute(NULL, "open", program, NULL, NULL, SW_SHOWDEFAULT);
 }
 
 LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -188,6 +202,7 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             listOpenWindows();
             break;
         }
+
         break;
     }
     case WM_DESTROY:
@@ -199,23 +214,43 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return 0;
 }
 
-int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args, int ncmdshow)
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-    WNDCLASSW wc = {0};
+    const char CLASS_NAME[] = "SuperManagerWindowClass";
 
-    wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hInstance = hInst;
-    wc.lpszClassName = L"myWindowClass";
+    WNDCLASS wc = {0};
+
     wc.lpfnWndProc = WindowProcedure;
+    wc.hInstance = hInst;
+    wc.lpszClassName = CLASS_NAME;
 
-    if (!RegisterClassW(&wc))
-        return -1;
+    if (!RegisterClass(&wc))
+    {
+        MessageBox(NULL, "Window registration failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);
+        return 0;
+    }
 
-    CreateWindowW(L"myWindowClass", L"SuperManager", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 600, 600, NULL, NULL, NULL, NULL);
+    int width = 600;
+    int height = 600;
+
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    int posX = (screenWidth - width) / 2;
+    int posY = (screenHeight - height) / 2;
+
+    HWND hwnd = CreateWindow(CLASS_NAME, "SuperManager", WS_OVERLAPPEDWINDOW, posX, posY, width, height, NULL, NULL, hInst, NULL);
+
+    if (hwnd == NULL)
+    {
+        MessageBox(NULL, "Window creation failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);
+        return 0;
+    }
+
+    ShowWindow(hwnd, nCmdShow);
+    UpdateWindow(hwnd);
 
     MSG msg = {0};
-
     while (GetMessage(&msg, NULL, 0, 0))
     {
         TranslateMessage(&msg);
