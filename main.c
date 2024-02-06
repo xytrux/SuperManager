@@ -6,7 +6,8 @@
 
 #define USER_INFO u->pw_gecos
 #define HOME_DIR u->pw_dir
-#define SYSTEM_INFO struct SystemInfo
+
+HWND hOut;
 
 void appendToEditControl(HWND hOut, const char *text)
 {
@@ -25,31 +26,21 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
         {
             strcat((char *)lParam, "   - ");
             strcat((char *)lParam, buffer);
-            strcat((char *)lParam, "\n");
+            strcat((char *)lParam, "\r\n");
         }
     }
     return TRUE;
 }
 
-SYSTEM_INFO
-{
-    MEMORYSTATUSEX memInfo;
-    DWORD uptime, processes;
-};
-
-HWND hOut;
-
 void printUserInfo()
 {
-
-    // Clear the output window
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     TCHAR username[UNLEN + 1];
     DWORD size = UNLEN + 1;
     if (GetUserName((TCHAR *)username, &size))
     {
         char output[512];
-        sprintf(output, "User Info:\n   - Username: %s\n\n", username);
+        sprintf(output, "User Info:\r\n\r\nUsername: %s\r\n", username);
         appendToEditControl(hOut, output);
     }
 }
@@ -58,18 +49,28 @@ void printSystemInfo(SYSTEM_INFO *s)
 {
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     char output[512];
-    sprintf(output, "System Info:\n   - Uptime: %ld seconds\n   - Total RAM: %.2f MB (%.2f GB)\n   - Free RAM: %.2f MB (%.2f GB)\n   - Processes: %d\n\n",
-            s->uptime,
-            (float)s->memInfo.ullTotalPhys / (1024 * 1024), (float)s->memInfo.ullTotalPhys / (1024 * 1024 * 1024),
-            (float)s->memInfo.ullAvailPhys / (1024 * 1024), (float)s->memInfo.ullAvailPhys / (1024 * 1024 * 1024),
-            s->processes);
+    sprintf(output, "System Info:\r\n"
+                    "Processor Architecture: %d\r\n"
+                    "Page size: %d\r\n"
+                    "Processor type: %d\r\n"
+                    "Number of processors: %d\r\n"
+                    "Minimum application address: %ld\r\n"
+                    "Maximum application address: %ld\r\n"
+                    "Active processor mask: %ld\r\n\r\n",
+            s->wProcessorArchitecture,
+            s->dwPageSize,
+            s->dwProcessorType,
+            s->dwNumberOfProcessors,
+            s->lpMinimumApplicationAddress,
+            s->lpMaximumApplicationAddress,
+            s->dwActiveProcessorMask);
     appendToEditControl(hOut, output);
 }
 
 void listOpenWindows()
 {
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
-    char output[4096] = "Open Windows:\n";
+    char output[4096] = "Open Windows:\r\n\r\n";
     EnumWindows(EnumWindowsProc, (LPARAM)output);
     appendToEditControl(hOut, output);
 }
@@ -77,7 +78,7 @@ void listOpenWindows()
 void listFilesAndFolders()
 {
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
-    char output[512] = "File Manager:\n";
+    char output[512] = "File Manager:\r\n\r\n";
 
     WIN32_FIND_DATA findFileData;
     HANDLE hFind = FindFirstFile(".\\*", &findFileData);
@@ -88,7 +89,7 @@ void listFilesAndFolders()
         {
             strcat(output, "   - ");
             strcat(output, findFileData.cFileName);
-            strcat(output, "\n");
+            strcat(output, "\r\n");
         } while (FindNextFile(hFind, &findFileData));
         FindClose(hFind);
     }
@@ -99,7 +100,7 @@ void listFilesAndFolders()
 void printHelp()
 {
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
-    char output[512] = "Help:\n   - Instructions on how to use each feature.\n   - Detailed explanations for each tab.\n";
+    char output[512] = "Help:\r\n   - Instructions on how to use each feature.\r\n   - Detailed explanations for each tab.\r\n";
     appendToEditControl(hOut, output);
 }
 
@@ -108,32 +109,27 @@ void listProcesses()
     SendMessage(hOut, WM_SETTEXT, 0, (LPARAM) "");
     HANDLE hProcessSnap;
     PROCESSENTRY32 pe32;
-    char output[4096] = "Running Processes:\n";
+    char output[4096] = "Running Processes:\r\n";
 
-    // Take a snapshot of all processes in the system.
     hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hProcessSnap == INVALID_HANDLE_VALUE)
     {
         return;
     }
 
-    // Set the size of the structure before using it.
     pe32.dwSize = sizeof(PROCESSENTRY32);
 
-    // Retrieve information about the first process,
-    // and exit if unsuccessful
     if (!Process32First(hProcessSnap, &pe32))
     {
-        CloseHandle(hProcessSnap); // clean the snapshot object
+        CloseHandle(hProcessSnap);
         return;
     }
 
-    // Now walk the snapshot of processes
     do
     {
         strcat(output, "   - ");
         strcat(output, pe32.szExeFile);
-        strcat(output, "\n");
+        strcat(output, "\r\n");
     } while (Process32Next(hProcessSnap, &pe32));
 
     CloseHandle(hProcessSnap);
@@ -146,9 +142,15 @@ void launchProgram(const char *program)
     ShellExecute(NULL, "open", program, NULL, NULL, SW_SHOWDEFAULT);
 }
 
+typedef struct {
+    SYSTEM_INFO sysInfo;
+    MEMORYSTATUSEX memInfo;
+    DWORD uptime, processes;
+} MY_SYSTEM_INFO;
+
 LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
-    SYSTEM_INFO s;
+    MY_SYSTEM_INFO s;
     s.memInfo.dwLength = sizeof(s.memInfo);
     GlobalMemoryStatusEx(&(s.memInfo));
     s.uptime = GetTickCount() / 1000;
@@ -178,7 +180,8 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             printUserInfo();
             break;
         case 2:
-            printSystemInfo(&s);
+            GetSystemInfo(&(s.sysInfo));
+            printSystemInfo(&(s.sysInfo));
             break;
         case 3:
             listFilesAndFolders();
