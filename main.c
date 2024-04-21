@@ -9,6 +9,9 @@
 
 HWND hOut;
 
+static BOOL isSystemInfoDisplayed = FALSE;
+static BOOL isProcessesDisplayed = FALSE;
+
 void appendToEditControl(HWND hOut, const char *text)
 {
     int TextLen = GetWindowTextLength(hOut);
@@ -170,6 +173,7 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         CreateWindow("BUTTON", "List Processes", WS_VISIBLE | WS_CHILD, 10, 290, 100, 30, hwnd, (HMENU)8, NULL, NULL);
         CreateWindow("BUTTON", "List Windows", WS_VISIBLE | WS_CHILD, 10, 330, 100, 30, hwnd, (HMENU)9, NULL, NULL);
         hOut = CreateWindow("EDIT", "", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL | ES_READONLY, 120, 10, 440, 340, hwnd, NULL, NULL, NULL);
+        SetTimer(hwnd, 10, 1000, NULL);
         break;
     }
     case WM_COMMAND:
@@ -210,6 +214,15 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_DESTROY:
         PostQuitMessage(0);
+        break;
+    case WM_TIMER:
+        if (isSystemInfoDisplayed) {
+        GetSystemInfo(&(s.sysInfo));
+        printSystemInfo(&(s.sysInfo));
+    }
+    if (isProcessesDisplayed) {
+        listProcesses();
+    }
         break;
     default:
         return DefWindowProc(hwnd, msg, wp, lp);
